@@ -1,0 +1,32 @@
+# Application
+APP_NAME="Tourisme Bénin"
+APP_ENV=development
+APP_DEBUG=true
+APP_URL=http://localhost/tourisme-benin
+
+# Base de données
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=benin_tourisme
+DB_USER=root
+DB_PASS=
+
+# Uploads
+MAX_FILE_SIZE=5242880
+ALLOWED_EXTENSIONS=jpg,jpeg,png,gif
+UPLOAD_PATH=/public/uploads
+
+# Sécurité
+SECRET_KEY=changez_cette_cle_secrete
+SESSION_NAME=tourisme_benin_session
+CSRF_PROTECTION=true
+
+# Email
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASS=
+
+# Chatbot
+CHATBOT_ENABLED=true
+CHATBOT_NAME="Bienvenue au Bénin"
