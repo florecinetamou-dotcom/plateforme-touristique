@@ -2,6 +2,7 @@
 $title = 'Sites touristiques - BeninExplore';
 $meta_description = 'Découvrez tous les sites touristiques du Bénin.';
 ob_start(); 
+
 ?>
 
 <!-- Bannière -->

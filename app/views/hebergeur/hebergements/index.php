@@ -238,9 +238,7 @@ ob_start();
                         Gérez vos biens et suivez leur statut de validation
                     </p>
                 </div>
-                <a href="/hebergeur/hebergements/ajouter" class="btn-benin">
-                    <i class="fas fa-plus-circle me-2"></i>Nouvel hébergement
-                </a>
+                
             </div>
 
             <?php if (!empty($hebergements)): ?>

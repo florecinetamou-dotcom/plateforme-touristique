@@ -1,8 +1,10 @@
 <?php
-$site   = $site   ?? null;
-$villes = $villes ?? [];
-$badges = $badges ?? [];
-$mode   = $mode   ?? 'create';
+$site              = $site              ?? null;
+$villes            = $villes            ?? [];
+$badges            = $badges            ?? [];
+$mode              = $mode              ?? 'create';
+$photoPrincipale   = $photoPrincipale   ?? null;
+$photosSecondaires = $photosSecondaires ?? [];
 
 $isEdit     = $mode === 'edit';
 $pageTitle  = $isEdit ? 'Modifier un site' : 'Ajouter un site';
@@ -131,17 +133,77 @@ function val($site, $key, $default = '') {
                     <input type="time" name="heure_fermeture" value="<?= val($site, 'heure_fermeture') ?>">
                 </div>
 
-                <!-- Photo -->
+                <!-- ══════════════════════════════════
+                     SECTION PHOTOS
+                ══════════════════════════════════ -->
                 <div class="form-group form-group--full">
-                    <label>Photo du site</label>
-                    <?php if (!empty($site->photo_url)): ?>
-                    <div class="photo-preview">
-                        <img src="<?= htmlspecialchars($site->photo_url) ?>" alt="Photo actuelle">
-                        <p class="photo-hint">Choisir un nouveau fichier pour remplacer la photo actuelle.</p>
+                    <label>Photos du site</label>
+
+                    <!-- Photo principale -->
+                    <div class="photo-section-label">
+                        <span class="photo-badge"><i>★</i> Photo principale</span>
                     </div>
-                    <?php endif; ?>
-                    <input type="file" name="photo" accept="image/jpeg,image/png,image/webp">
-                    <p class="field-hint">JPG, PNG ou WEBP — max 3 Mo</p>
+
+                    <div class="photo-upload-zone" id="zone-main">
+                        <input type="file" name="photo_principale" id="input-main"
+                               accept="image/jpeg,image/png,image/webp"
+                               onchange="previewPhoto(this, 'zone-main', 'preview-main', 'placeholder-main')">
+
+                        <!-- Placeholder -->
+                        <div class="photo-placeholder" id="placeholder-main"
+                             <?= $photoPrincipale ? 'style="display:none"' : '' ?>>
+                            <div class="upload-icon">☁</div>
+                            <div class="upload-label">Cliquer ou glisser une photo</div>
+                            <div class="upload-sub">JPG, PNG, WEBP · Max 3 Mo · Photo de couverture</div>
+                        </div>
+
+                        <!-- Prévisualisation -->
+                        <div class="photo-preview-wrap" id="preview-main"
+                             <?= $photoPrincipale ? '' : 'style="display:none"' ?>>
+                            <img src="<?= $photoPrincipale ? htmlspecialchars($photoPrincipale->url) : '' ?>"
+                                 id="img-main" alt="Photo principale">
+                            <button type="button" class="photo-remove"
+                                    onclick="removePhoto('zone-main','preview-main','placeholder-main','input-main')">✕</button>
+                        </div>
+                    </div>
+
+                    <!-- Photos secondaires -->
+                    <div class="photo-section-label" style="margin-top:20px">
+                        <span class="photo-badge photo-badge--grey"><i>⊞</i> Galerie (3 photos max)</span>
+                    </div>
+
+                    <div class="secondary-photos-grid">
+                        <?php for ($i = 1; $i <= 3; $i++):
+                            $secPhoto = $photosSecondaires[$i - 1] ?? null;
+                        ?>
+                        <div class="secondary-photo-slot">
+                            <div class="photo-upload-zone photo-upload-zone--sm" id="zone-sec-<?= $i ?>">
+                                <input type="file" name="photos_secondaires[]" id="input-sec-<?= $i ?>"
+                                       accept="image/jpeg,image/png,image/webp"
+                                       onchange="previewPhoto(this, 'zone-sec-<?= $i ?>', 'preview-sec-<?= $i ?>', null)">
+
+                                <div class="photo-placeholder photo-placeholder--sm"
+                                     id="placeholder-sec-<?= $i ?>"
+                                     <?= $secPhoto ? 'style="display:none"' : '' ?>>
+                                    <div class="upload-icon" style="font-size:1.1rem">+</div>
+                                    <div class="upload-label" style="font-size:.7rem">Photo <?= $i ?></div>
+                                </div>
+
+                                <div class="photo-preview-wrap" id="preview-sec-<?= $i ?>"
+                                     <?= $secPhoto ? '' : 'style="display:none"' ?>>
+                                    <img src="<?= $secPhoto ? htmlspecialchars($secPhoto->url) : '' ?>"
+                                         id="img-sec-<?= $i ?>" alt="Photo <?= $i ?>">
+                                    <button type="button" class="photo-remove photo-remove--sm"
+                                            onclick="removePhoto('zone-sec-<?= $i ?>','preview-sec-<?= $i ?>','placeholder-sec-<?= $i ?>','input-sec-<?= $i ?>')">✕</button>
+                                </div>
+                            </div>
+                        </div>
+                        <?php endfor; ?>
+                    </div>
+
+                    <p class="field-hint" style="margin-top:10px">
+                        Les nouvelles photos uploadées s'ajoutent. Pour supprimer une photo existante, utilisez la page de modification.
+                    </p>
                 </div>
 
                 <!-- Publié -->
@@ -168,6 +230,7 @@ function val($site, $key, $default = '') {
 </div>
 
 <style>
+/* ── Form card ── */
 .form-card {
     background: var(--card);
     border: 1px solid var(--border);
@@ -183,7 +246,7 @@ function val($site, $key, $default = '') {
 }
 .form-group { display: flex; flex-direction: column; gap: 7px; }
 .form-group--full { grid-column: 1 / -1; }
-.form-group label {
+.form-group > label:first-child {
     font-size: .78rem;
     font-weight: 600;
     color: rgba(255,255,255,.55);
@@ -215,31 +278,157 @@ function val($site, $key, $default = '') {
 .form-group textarea::placeholder { color: rgba(255,255,255,.25); }
 .form-group select option { background: #1f2937; color: #fff; }
 .form-group textarea { resize: vertical; min-height: 100px; }
-.field-hint { font-size: .72rem; color: #6b7280; margin-top: 4px; }
-.photo-preview { margin-bottom: 10px; }
-.photo-preview img { width: 180px; height: 120px; object-fit: cover; border-radius: 10px; border: 1px solid rgba(255,255,255,.1); }
-.photo-hint { font-size: .72rem; color: #6b7280; margin-top: 6px; }
+.field-hint { font-size: .72rem; color: #6b7280; }
 .checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    cursor: pointer;
-    font-size: .88rem;
-    color: rgba(255,255,255,.7);
+    display: flex; align-items: center; gap: 10px;
+    cursor: pointer; font-size: .88rem; color: rgba(255,255,255,.7);
 }
 .checkbox-label input { width: 16px; height: 16px; accent-color: #008751; }
 .form-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 12px;
-    padding-top: 20px;
-    border-top: 1px solid rgba(255,255,255,.07);
+    display: flex; justify-content: flex-end; gap: 12px;
+    padding-top: 20px; border-top: 1px solid rgba(255,255,255,.07);
 }
+
+/* ── Photo badges ── */
+.photo-section-label { margin-bottom: 10px; }
+.photo-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(0,135,81,.15); color: #4ade80;
+    border: 1px solid rgba(0,135,81,.3);
+    border-radius: 50px; padding: 4px 14px;
+    font-size: .72rem; font-weight: 600;
+}
+.photo-badge--grey {
+    background: rgba(255,255,255,.06); color: rgba(255,255,255,.5);
+    border-color: rgba(255,255,255,.1);
+}
+
+/* ── Zone upload ── */
+.photo-upload-zone {
+    position: relative;
+    border: 2px dashed rgba(255,255,255,.15);
+    border-radius: 12px;
+    background: rgba(255,255,255,.03);
+    cursor: pointer;
+    transition: all .25s;
+    overflow: hidden;
+    height: 180px;
+}
+.photo-upload-zone:hover {
+    border-color: #008751;
+    background: rgba(0,135,81,.05);
+}
+.photo-upload-zone input[type="file"] {
+    position: absolute; inset: 0;
+    opacity: 0; cursor: pointer; z-index: 2;
+    width: 100%; height: 100%;
+}
+.photo-upload-zone--sm { height: 100%; }
+
+/* ── Placeholder ── */
+.photo-placeholder {
+    height: 100%;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 8px;
+    text-align: center; padding: 20px;
+}
+.photo-placeholder--sm { gap: 4px; }
+.upload-icon {
+    width: 44px; height: 44px; border-radius: 50%;
+    background: rgba(0,135,81,.15); color: #4ade80;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.3rem;
+}
+.upload-label { font-size: .8rem; font-weight: 600; color: rgba(255,255,255,.7); }
+.upload-sub   { font-size: .7rem; color: #6b7280; }
+
+/* ── Prévisualisation ── */
+.photo-preview-wrap {
+    position: relative;
+    height: 100%;
+}
+.photo-preview-wrap img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    border-radius: 10px;
+    display: block;
+}
+.photo-remove {
+    position: absolute; top: 8px; right: 8px;
+    width: 28px; height: 28px; border-radius: 50%;
+    background: rgba(15,25,35,.8); color: #fff;
+    border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .75rem; z-index: 3;
+    transition: background .2s;
+}
+.photo-remove:hover { background: #E8112D; }
+.photo-remove--sm { width: 22px; height: 22px; font-size: .65rem; top: 5px; right: 5px; }
+
+/* ── Grille secondaires ── */
+.secondary-photos-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+.secondary-photo-slot {
+    aspect-ratio: 4/3;
+}
+.secondary-photo-slot .photo-upload-zone {
+    height: 100%;
+}
+
 @media (max-width: 640px) {
     .form-grid { grid-template-columns: 1fr; }
     .form-group--full { grid-column: 1; }
+    .secondary-photos-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
 }
 </style>
+
+<script>
+function previewPhoto(input, zoneId, previewId, placeholderId) {
+    const file = input.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = e => {
+        const preview = document.getElementById(previewId);
+        const img     = preview.querySelector('img');
+        img.src = e.target.result;
+        preview.style.display = 'block';
+
+        if (placeholderId) {
+            document.getElementById(placeholderId).style.display = 'none';
+        }
+        // Cacher les éléments placeholder dans la zone (secondaires)
+        const zone = document.getElementById(zoneId);
+        zone.querySelectorAll('.photo-placeholder').forEach(el => el.style.display = 'none');
+    };
+    reader.readAsDataURL(file);
+}
+
+function removePhoto(zoneId, previewId, placeholderId, inputId) {
+    const preview = document.getElementById(previewId);
+    const input   = document.getElementById(inputId);
+
+    preview.style.display = 'none';
+    preview.querySelector('img').src = '';
+    input.value = '';
+
+    if (placeholderId) {
+        document.getElementById(placeholderId).style.display = '';
+    }
+    const zone = document.getElementById(zoneId);
+    zone.querySelectorAll('.photo-placeholder').forEach(el => el.style.display = '');
+}
+
+// Drag & drop highlight
+document.querySelectorAll('.photo-upload-zone').forEach(zone => {
+    zone.addEventListener('dragover',  e => { e.preventDefault(); zone.style.borderColor = '#008751'; });
+    zone.addEventListener('dragleave', ()  => zone.style.borderColor = '');
+    zone.addEventListener('drop',      e => { e.preventDefault(); zone.style.borderColor = ''; });
+});
+</script>
 
 </body>
 </html>

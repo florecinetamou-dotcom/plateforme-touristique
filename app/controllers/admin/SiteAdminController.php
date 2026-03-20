@@ -3,7 +3,8 @@ namespace App\Controllers\Admin;
 
 use Core\Controller;
 use App\Models\Hebergement;
-use App\Models\Ville;
+
+defined('ROOT_PATH') or define('ROOT_PATH', dirname(__DIR__, 3));
 
 class SiteAdminController extends Controller {
 
@@ -12,19 +13,19 @@ class SiteAdminController extends Controller {
 
     public function __construct() {
         $this->requireAuth('admin');
-        $this->model = new Hebergement(); // réutilise query()
+        $this->model = new Hebergement();
     }
 
-    // =========================================================
-    //  LISTE
-    // =========================================================
+    // ════════════════════════════════════════════════
+    // LISTE
+    // ════════════════════════════════════════════════
     public function index() {
-        $search   = trim($_GET['search']   ?? '');
-        $ville_id = $_GET['ville_id']      ?? '';
-        $categorie= $_GET['categorie']     ?? '';
-        $valide   = $_GET['valide']        ?? '';
-        $page     = max(1, (int)($_GET['page'] ?? 1));
-        $offset   = ($page - 1) * self::PER_PAGE;
+        $search    = trim($_GET['search']   ?? '');
+        $ville_id  = $_GET['ville_id']      ?? '';
+        $categorie = $_GET['categorie']     ?? '';
+        $valide    = $_GET['valide']        ?? '';
+        $page      = max(1, (int)($_GET['page'] ?? 1));
+        $offset    = ($page - 1) * self::PER_PAGE;
 
         $where  = "WHERE 1=1";
         $params = [];
@@ -34,27 +35,23 @@ class SiteAdminController extends Controller {
             $like     = "%$search%";
             $params   = array_merge($params, [$like, $like]);
         }
-        if ($ville_id !== '') {
-            $where   .= " AND s.ville_id = ?";
-            $params[] = $ville_id;
-        }
-        if ($categorie !== '') {
-            $where   .= " AND s.categorie = ?";
-            $params[] = $categorie;
-        }
-        if ($valide !== '') {
-            $where   .= " AND s.est_valide = ?";
-            $params[] = (int)$valide;
-        }
+        if ($ville_id !== '') { $where .= " AND s.ville_id = ?"; $params[] = $ville_id; }
+        if ($categorie !== '') { $where .= " AND s.categorie = ?"; $params[] = $categorie; }
+        if ($valide !== '') { $where .= " AND s.est_valide = ?"; $params[] = (int)$valide; }
 
-        $base = "FROM site_touristique s JOIN ville v ON s.ville_id = v.id $where";
-
-        $total_res   = $this->model->query("SELECT COUNT(*) as total $base", $params);
+        $total_res   = $this->model->query(
+            "SELECT COUNT(*) as total FROM site_touristique s LEFT JOIN ville v ON s.ville_id = v.id $where",
+            $params
+        );
         $total       = $total_res[0]->total ?? 0;
         $total_pages = max(1, ceil($total / self::PER_PAGE));
 
         $sites = $this->model->query(
-            "SELECT s.*, v.nom as ville_nom $base
+            "SELECT s.*, v.nom as ville_nom,
+                    (SELECT url FROM photo_site_touristique WHERE site_id = s.id AND est_principale = 1 LIMIT 1) as photo_url
+             FROM site_touristique s
+             LEFT JOIN ville v ON s.ville_id = v.id
+             $where
              ORDER BY s.id DESC
              LIMIT " . self::PER_PAGE . " OFFSET $offset",
             $params
@@ -73,23 +70,25 @@ class SiteAdminController extends Controller {
         ]);
     }
 
-    // =========================================================
-    //  FORMULAIRE CRÉATION
-    // =========================================================
+    // ════════════════════════════════════════════════
+    // FORMULAIRE CRÉATION
+    // ════════════════════════════════════════════════
     public function create() {
         $villes = $this->model->query("SELECT id, nom FROM ville WHERE est_active = 1 ORDER BY nom ASC");
 
         $this->view('admin/sites/form', [
-            'site'   => null,
-            'villes' => $villes,
-            'badges' => $this->getBadges(),
-            'mode'   => 'create',
+            'site'              => null,
+            'villes'            => $villes,
+            'badges'            => $this->getBadges(),
+            'mode'              => 'create',
+            'photoPrincipale'   => null,
+            'photosSecondaires' => [],
         ]);
     }
 
-    // =========================================================
-    //  ENREGISTRER
-    // =========================================================
+    // ════════════════════════════════════════════════
+    // ENREGISTRER
+    // ════════════════════════════════════════════════
     public function store() {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             $this->redirect('/admin/sites');
@@ -98,93 +97,90 @@ class SiteAdminController extends Controller {
         $data = $this->validerFormulaire();
         if (!$data) return;
 
-        // Upload photo
-        $photo_url = $this->uploadPhoto();
-
         $this->model->query(
-            "INSERT INTO site_touristique 
-             (ville_id, nom, description, categorie, adresse, latitude, longitude, prix_entree, heure_ouverture, heure_fermeture, photo_url, est_valide)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO site_touristique
+             (ville_id, nom, description, categorie, adresse, latitude, longitude,
+              prix_entree, heure_ouverture, heure_fermeture, est_valide)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
-                $data['ville_id'],
-                $data['nom'],
-                $data['description'],
-                $data['categorie'],
-                $data['adresse'],
-                $data['latitude'] ?: null,
-                $data['longitude'] ?: null,
-                $data['prix_entree'],
-                $data['heure_ouverture'] ?: null,
-                $data['heure_fermeture'] ?: null,
-                $photo_url,
-                $data['est_valide'],
+                $data['ville_id'], $data['nom'], $data['description'], $data['categorie'],
+                $data['adresse'], $data['latitude'] ?: null, $data['longitude'] ?: null,
+                $data['prix_entree'], $data['heure_ouverture'] ?: null,
+                $data['heure_fermeture'] ?: null, $data['est_valide'],
             ]
         );
 
-        $_SESSION['success'] = "Site touristique \"{$data['nom']}\" créé avec succès.";
+        $res    = $this->model->query("SELECT LAST_INSERT_ID() as id");
+        $siteId = $res[0]->id ?? null;
+
+        if ($siteId) {
+            $this->handlePhotoUpload($siteId);
+        }
+
+        $_SESSION['success'] = "Site \"{$data['nom']}\" créé avec succès.";
         $this->redirect('/admin/sites');
     }
 
-    // =========================================================
-    //  FORMULAIRE ÉDITION
-    // =========================================================
+    // ════════════════════════════════════════════════
+    // FORMULAIRE ÉDITION
+    // ════════════════════════════════════════════════
     public function edit($id) {
-        $site = $this->getSiteOuRediriger($id);
+        $site   = $this->getSiteOuRediriger($id);
         $villes = $this->model->query("SELECT id, nom FROM ville WHERE est_active = 1 ORDER BY nom ASC");
+        $photos = $this->getPhotosSite($id);
+
+        $photoPrincipale   = null;
+        $photosSecondaires = [];
+        foreach ($photos as $photo) {
+            if ($photo->est_principale == 1) $photoPrincipale = $photo;
+            else $photosSecondaires[] = $photo;
+        }
 
         $this->view('admin/sites/form', [
-            'site'   => $site,
-            'villes' => $villes,
-            'badges' => $this->getBadges(),
-            'mode'   => 'edit',
+            'site'              => $site,
+            'villes'            => $villes,
+            'badges'            => $this->getBadges(),
+            'mode'              => 'edit',
+            'photoPrincipale'   => $photoPrincipale,
+            'photosSecondaires' => $photosSecondaires,
         ]);
     }
 
-    // =========================================================
-    //  METTRE À JOUR
-    // =========================================================
+    // ════════════════════════════════════════════════
+    // METTRE À JOUR
+    // ════════════════════════════════════════════════
     public function update($id) {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             $this->redirect('/admin/sites');
         }
 
-        $site = $this->getSiteOuRediriger($id);
+        $this->getSiteOuRediriger($id);
         $data = $this->validerFormulaire();
         if (!$data) return;
-
-        // Upload nouvelle photo si fournie
-        $photo_url = $this->uploadPhoto() ?? $site->photo_url;
 
         $this->model->query(
             "UPDATE site_touristique SET
              ville_id=?, nom=?, description=?, categorie=?, adresse=?,
              latitude=?, longitude=?, prix_entree=?,
-             heure_ouverture=?, heure_fermeture=?, photo_url=?, est_valide=?
+             heure_ouverture=?, heure_fermeture=?, est_valide=?
              WHERE id=?",
             [
-                $data['ville_id'],
-                $data['nom'],
-                $data['description'],
-                $data['categorie'],
-                $data['adresse'],
-                $data['latitude'] ?: null,
-                $data['longitude'] ?: null,
-                $data['prix_entree'],
-                $data['heure_ouverture'] ?: null,
-                $data['heure_fermeture'] ?: null,
-                $photo_url,
-                $data['est_valide'],
-                $id,
+                $data['ville_id'], $data['nom'], $data['description'], $data['categorie'],
+                $data['adresse'], $data['latitude'] ?: null, $data['longitude'] ?: null,
+                $data['prix_entree'], $data['heure_ouverture'] ?: null,
+                $data['heure_fermeture'] ?: null, $data['est_valide'], $id,
             ]
         );
 
-        $_SESSION['success'] = "Site \"{$data['nom']}\" mis à jour avec succès.";
+        $this->handlePhotoUpload($id);
+
+        $_SESSION['success'] = "Site \"{$data['nom']}\" mis à jour.";
         $this->redirect('/admin/sites');
     }
 
-    // =========================================================
-    //  SUPPRIMER
-    // =========================================================
+    // ════════════════════════════════════════════════
+    // SUPPRIMER
+    // ════════════════════════════════════════════════
     public function supprimer($id) {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             $this->redirect('/admin/sites');
@@ -192,41 +188,50 @@ class SiteAdminController extends Controller {
 
         $site = $this->getSiteOuRediriger($id);
 
-        // Supprimer la photo physique si locale
-        if (!empty($site->photo_url) && strpos($site->photo_url, '/uploads/') !== false) {
-            $chemin = dirname(__DIR__, 3) . '/public' . $site->photo_url;
-            if (file_exists($chemin)) unlink($chemin);
+        foreach ($this->getPhotosSite($id) as $photo) {
+            $this->supprimerFichierPhoto($photo->url);
         }
-
+        $this->model->query("DELETE FROM photo_site_touristique WHERE site_id = ?", [$id]);
         $this->model->query("DELETE FROM site_touristique WHERE id = ?", [$id]);
 
         $_SESSION['success'] = "Site \"{$site->nom}\" supprimé.";
         $this->redirect('/admin/sites');
     }
 
-    // =========================================================
-    //  TOGGLE PUBLIER / DÉPUBLIER
-    // =========================================================
+    // ════════════════════════════════════════════════
+    // TOGGLE PUBLIER / DÉPUBLIER
+    // ════════════════════════════════════════════════
     public function toggleValide($id) {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             $this->redirect('/admin/sites');
         }
 
-        $site      = $this->getSiteOuRediriger($id);
-        $nouveau   = $site->est_valide ? 0 : 1;
-        $label     = $nouveau ? 'publié' : 'dépublié';
+        $site    = $this->getSiteOuRediriger($id);
+        $nouveau = $site->est_valide ? 0 : 1;
 
         $this->model->query("UPDATE site_touristique SET est_valide = ? WHERE id = ?", [$nouveau, $id]);
 
-        $_SESSION['success'] = "Site \"{$site->nom}\" $label.";
+        $_SESSION['success'] = "Site \"{$site->nom}\" " . ($nouveau ? 'publié' : 'dépublié') . ".";
         $this->redirect('/admin/sites');
     }
 
-    // =========================================================
-    //  DÉTAIL
-    // =========================================================
+    // ════════════════════════════════════════════════
+    // DÉTAIL
+    // ════════════════════════════════════════════════
     public function show($id) {
-        $site = $this->getSiteOuRediriger($id);
+        $site   = $this->getSiteOuRediriger($id);
+        $photos = $this->getPhotosSite($id);
+
+        $photoPrincipale   = null;
+        $photosSecondaires = [];
+        foreach ($photos as $photo) {
+            if ($photo->est_principale == 1) $photoPrincipale = $photo;
+            else $photosSecondaires[] = $photo;
+        }
+
+        $site->photo_principale   = $photoPrincipale;
+        $site->photos_secondaires = $photosSecondaires;
+        $site->photo_url          = $photoPrincipale->url ?? null;
 
         $this->view('admin/sites/show', [
             'site'   => $site,
@@ -234,11 +239,118 @@ class SiteAdminController extends Controller {
         ]);
     }
 
-    // =========================================================
-    //  PRIVÉ
-    // =========================================================
+    // ════════════════════════════════════════════════
+    // PRIVÉ — Gérer l'upload photo principale + secondaires
+    // ════════════════════════════════════════════════
+    private function handlePhotoUpload(int $siteId): void {
+        $uploadDir = ROOT_PATH . '/public/uploads/sites/';
+        if (!file_exists($uploadDir)) mkdir($uploadDir, 0777, true);
+
+        // Photo principale
+        if (isset($_FILES['photo_principale']) && $_FILES['photo_principale']['error'] === UPLOAD_ERR_OK) {
+            // Supprimer l'ancienne
+            $ancienne = $this->model->query(
+                "SELECT * FROM photo_site_touristique WHERE site_id = ? AND est_principale = 1 LIMIT 1",
+                [$siteId]
+            );
+            if (!empty($ancienne)) {
+                $this->supprimerFichierPhoto($ancienne[0]->url);
+                $this->model->query(
+                    "DELETE FROM photo_site_touristique WHERE site_id = ? AND est_principale = 1",
+                    [$siteId]
+                );
+            }
+
+            $result = $this->uploadPhoto($_FILES['photo_principale'], $uploadDir, $siteId, 'main');
+            if ($result['success']) {
+                $this->model->query(
+                    "INSERT INTO photo_site_touristique (site_id, url, est_principale, ordre) VALUES (?, ?, 1, 0)",
+                    [$siteId, $result['path']]
+                );
+            }
+        }
+
+        // Photos secondaires
+        if (isset($_FILES['photos_secondaires'])) {
+            foreach ($_FILES['photos_secondaires']['name'] as $key => $name) {
+                if (empty($name) || $_FILES['photos_secondaires']['error'][$key] !== UPLOAD_ERR_OK) continue;
+
+                $file = [
+                    'name'     => $_FILES['photos_secondaires']['name'][$key],
+                    'type'     => $_FILES['photos_secondaires']['type'][$key],
+                    'tmp_name' => $_FILES['photos_secondaires']['tmp_name'][$key],
+                    'error'    => $_FILES['photos_secondaires']['error'][$key],
+                    'size'     => $_FILES['photos_secondaires']['size'][$key],
+                ];
+
+                $result = $this->uploadPhoto($file, $uploadDir, $siteId, 'sec_' . ($key + 1));
+                if ($result['success']) {
+                    $this->model->query(
+                        "INSERT INTO photo_site_touristique (site_id, url, est_principale, ordre) VALUES (?, ?, 0, ?)",
+                        [$siteId, $result['path'], $key + 1]
+                    );
+                }
+            }
+        }
+    }
+
+    // ════════════════════════════════════════════════
+    // PRIVÉ — Upload + validation d'un fichier photo
+    // ════════════════════════════════════════════════
+    private function uploadPhoto(array $file, string $uploadDir, int $siteId, string $suffix): array {
+        $result = ['success' => false, 'path' => null, 'error' => null];
+
+        $finfo    = finfo_open(FILEINFO_MIME_TYPE);
+        $mimeType = finfo_file($finfo, $file['tmp_name']);
+        finfo_close($finfo);
+
+        if (!in_array($mimeType, ['image/jpeg', 'image/png', 'image/webp'])) {
+            $result['error'] = "Type non autorisé ($mimeType)";
+            return $result;
+        }
+        if ($file['size'] > 3 * 1024 * 1024) {
+            $result['error'] = "Fichier trop volumineux (max 3 Mo)";
+            return $result;
+        }
+
+        $ext      = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+        $filename = 'site_' . $siteId . '_' . $suffix . '_' . time() . '.' . $ext;
+
+        if (move_uploaded_file($file['tmp_name'], $uploadDir . $filename)) {
+            $result['success'] = true;
+            $result['path']    = '/uploads/sites/' . $filename;
+        } else {
+            $result['error'] = "Échec du déplacement vers $uploadDir$filename";
+        }
+
+        return $result;
+    }
+
+    // ════════════════════════════════════════════════
+    // PRIVÉ — Supprimer fichier physique
+    // ════════════════════════════════════════════════
+    private function supprimerFichierPhoto(string $url): void {
+        if (!empty($url) && strpos($url, '/uploads/') !== false) {
+            $chemin = ROOT_PATH . '/public' . $url;
+            if (file_exists($chemin)) unlink($chemin);
+        }
+    }
+
+    // ════════════════════════════════════════════════
+    // PRIVÉ — Toutes les photos d'un site
+    // ════════════════════════════════════════════════
+    private function getPhotosSite(int $siteId): array {
+        return $this->model->query(
+            "SELECT * FROM photo_site_touristique WHERE site_id = ? ORDER BY est_principale DESC, ordre ASC",
+            [$siteId]
+        );
+    }
+
+    // ════════════════════════════════════════════════
+    // PRIVÉ — Valider le formulaire POST
+    // ════════════════════════════════════════════════
     private function validerFormulaire(): array|false {
-        $nom      = trim($_POST['nom']      ?? '');
+        $nom      = trim($_POST['nom']       ?? '');
         $ville_id = (int)($_POST['ville_id'] ?? 0);
 
         if (empty($nom) || $ville_id === 0) {
@@ -262,37 +374,13 @@ class SiteAdminController extends Controller {
         ];
     }
 
-    private function uploadPhoto(): ?string {
-        if (empty($_FILES['photo']['name'])) return null;
-
-        $file    = $_FILES['photo'];
-        $allowed = ['image/jpeg', 'image/png', 'image/webp'];
-
-        if (!in_array($file['type'], $allowed)) {
-            $_SESSION['error'] = "Format de photo invalide (JPG, PNG, WEBP uniquement).";
-            return null;
-        }
-
-        if ($file['size'] > 3 * 1024 * 1024) {
-            $_SESSION['error'] = "La photo ne doit pas dépasser 3 Mo.";
-            return null;
-        }
-
-        $ext      = pathinfo($file['name'], PATHINFO_EXTENSION);
-        $filename = 'site_' . uniqid() . '.' . $ext;
-        $dir      = dirname(__DIR__, 3) . '/public/uploads/sites/';
-
-        if (!is_dir($dir)) mkdir($dir, 0755, true);
-
-        move_uploaded_file($file['tmp_name'], $dir . $filename);
-
-        return '/uploads/sites/' . $filename;
-    }
-
+    // ════════════════════════════════════════════════
+    // PRIVÉ — Récupérer un site ou rediriger
+    // ════════════════════════════════════════════════
     private function getSiteOuRediriger(int $id): object {
         $r = $this->model->query(
             "SELECT s.*, v.nom as ville_nom FROM site_touristique s
-             JOIN ville v ON s.ville_id = v.id
+             LEFT JOIN ville v ON s.ville_id = v.id
              WHERE s.id = ? LIMIT 1",
             [$id]
         );
@@ -303,6 +391,9 @@ class SiteAdminController extends Controller {
         return $r[0];
     }
 
+    // ════════════════════════════════════════════════
+    // PRIVÉ — Badges sidebar
+    // ════════════════════════════════════════════════
     private function getBadges(): array {
         $r = $this->model->query("SELECT COUNT(*) as nb FROM hebergement WHERE statut = 'en_attente'");
         return ['nb_hebergements_attente' => $r[0]->nb ?? 0];

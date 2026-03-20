@@ -93,7 +93,7 @@ return [
 
     // ─── ESPACE ADMIN — FAVORIS ───────────────────────────────
     '/admin/favoris' => ['App\\Controllers\\Admin\\FavoriAdminController', 'index'],
-    
+
     // ─── ESPACE ADMIN — CHATBOT ───────────────────────────────
     '/admin/chatbot' => ['App\\Controllers\\Admin\\ChatbotAdminController', 'index'],
 
@@ -122,5 +122,18 @@ return [
     '/admin/reservations/{id}/confirmer' => ['App\\Controllers\\Admin\\ReservationAdminController', 'confirmer'],
     '/admin/reservations/{id}/annuler' => ['App\\Controllers\\Admin\\ReservationAdminController', 'annuler'],
 
+    // FAVORIS FRONT
+    '/favoris' => ['App\\Controllers\\Front\\FavoriController', 'index'],
+    '/favori/toggle/{id}' => ['App\\Controllers\\Front\\FavoriController', 'toggle'],
 
+    // MOT DE PASSE OUBLIÉ
+
+    '/forgot_password' => ['App\\Controllers\\Front\\AuthController', 'forgotPassword'],
+    '/reset_password' => ['App\\Controllers\\Front\\AuthController', 'resetPassword'],
+
+    // chatbot widget
+    '/chatbot/message' => ['App\\Controllers\\Front\\ChatbotController', 'message'],
+
+    // chatbot history
+    '/chatbot/history' => ['App\\Controllers\\Front\\ChatbotController', 'history'],
 ];

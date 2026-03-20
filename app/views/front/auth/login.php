@@ -340,7 +340,7 @@ if (!empty($_SESSION['user_id'])) {
                             <input class="form-check-input" type="checkbox" name="remember" id="remember">
                             <label class="form-check-label" for="remember">Se souvenir de moi</label>
                         </div>
-                        <a href="/forgot-password" class="link-benin" style="font-size:0.82rem;">Mot de passe oublié ?</a>
+                        <a href="/forgot_password" class="link-benin" style="font-size:0.82rem;">Mot de passe oublié ?</a>
                     </div>
 
                     <button type="submit" class="btn btn-login w-100 mb-3">
