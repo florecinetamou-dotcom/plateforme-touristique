@@ -1,0 +1,40 @@
+{
+    "name": "tourisme-benin/application",
+    "description": "Plateforme de réservation touristique pour le Bénin",
+    "type": "project",
+    "require": {
+        "php": ">=7.4",
+        "vlucas/phpdotenv": "^5.5"
+    },
+    "autoload": {
+<<<<<<< HEAD
+        "psr-4": {
+            "App\\Controllers\\": "app/controllers/",
+            "App\\Models\\": "app/models/",
+            "Core\\": "app/core/"
+        }
+    }
+}
+=======
+        "classmap": [
+            "app/"
+        ]
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+>>>>>>> 74d49c7af9d9097dcfef12a3b22260a097f830cc

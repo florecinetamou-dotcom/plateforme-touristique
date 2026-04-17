@@ -1,0 +1,38 @@
+# Environnement
+.env
+.env.local
+.env.production
+
+# Dépendances
+/vendor/
+/node_modules/
+
+# Uploads
+/public/uploads/
+!public/uploads/.gitkeep
+
+# Logs
+/storage/logs/
+*.log
+
+# Cache
+/storage/cache/
+/tmp/
+
+# IDE
+.vscode/
+.idea/
+*.sublime-*
+
+# Backups
+*.sql.gz
+*.sql.bak
+/database/backups/
+!database/backups/.gitkeep
+
+# Composer
+composer.phar
+
+# OS
+.DS_Store
+Thumbs.db
